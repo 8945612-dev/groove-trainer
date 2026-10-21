@@ -408,7 +408,7 @@ function head(name,idx,gs){
   var b=$('#pname'),len=name.length,d=$('.day');
   b.textContent=name;b.style.fontSize=len>10?'32px':len>7?'38px':'';
   b.style.transform=len>7?'translateY(-50%) rotate(-1deg)':'';
-  d.style.minWidth='';if(len>7)d.style.minWidth=Math.ceil(b.offsetWidth+10)+'px';
+  d.style.minWidth='';d.style.minWidth=Math.max(120,Math.ceil(b.offsetWidth+12))+'px';
   $$('#chips .chip').forEach(function(c,i){c.setAttribute('aria-pressed',String(i===idx))});
   var g=$('#gs');g.hidden=!gs;if(gs)g.href=gs;
   $('#listTitle').textContent=padMode?'Рудименты':'Паттерны';$('#listRange').textContent=padMode?String(rudiments.length):'303–330';
