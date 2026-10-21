@@ -432,6 +432,7 @@ function renderRud(){
     var x=rudH[s];if(x.h!==h)return;
     c.innerHTML='<span class="hand'+((x.acc||x.plain)?'':' u')+'" style="color:'+(h==='R'?'var(--soft)':'var(--mag)')+'">'+h+'</span>'+(x.acc?'<i class="acc">&gt;</i>':'');
   })});
+  if(padFoot)row('sym','F',function(c,s){if(s%sp===0)c.innerHTML=SYM.k});
   head(rd.id,curR,null);
   $('#customBox').hidden=!rd.custom;
 }
@@ -632,7 +633,7 @@ function setMode(pad){
   $('#padBox').hidden=!pad;renderChips();renderSheet();
 }
 $('#mPad').onclick=function(){setMode(!padMode)};
-$('#tFoot').onclick=function(){padFoot=!padFoot;this.setAttribute('aria-pressed',String(padFoot))};
+$('#tFoot').onclick=function(){padFoot=!padFoot;this.setAttribute('aria-pressed',String(padFoot));renderSheet()};
 function applyCustom(){
   var rd=rudiments.filter(function(r){return r.custom})[0];
   var v=$('#mySeq').value.replace(/[^RrLl\-\s]/g,'').replace(/\s+/g,'');
