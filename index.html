@@ -124,6 +124,11 @@ body{background:var(--table);color:var(--ink);font:400 15px/1.45 var(--f);
 .row.sym .cell+.cell{border-left:1.5px dashed rgba(20,34,107,.35)}
 .cell svg{width:20px;height:20px;overflow:visible}
 .hand{font:700 17px var(--f)}
+.hand.u{font-weight:500;font-size:14px}
+.hand:not(.u){margin-top:9px}
+[hidden]{display:none!important}
+.cell{position:relative}
+.acc{position:absolute;top:2px;left:50%;transform:translateX(-50%);font:700 11px/1 var(--f);font-style:normal;color:var(--ink)}
 .cell.now{background:var(--yel);box-shadow:inset 0 0 0 2px var(--ink)}
 .row.txt .cell{height:26px;font:400 13px var(--f);color:var(--soft)}
 .row.txt .cell.snd{color:var(--ink);font-weight:700}
@@ -218,7 +223,7 @@ input[type=range]::-moz-range-thumb{width:18px;height:22px;background:var(--pink
 
 <div class="layout"><div class="colL">
   <div class="scrap y"><span class="tape"></span>
-    <h4>Паттерны<em>303–330</em></h4>
+    <h4><span id="listTitle">Паттерны</span><em id="listRange">303–330</em></h4>
     <div class="chips" id="chips" role="group" aria-label="Список паттернов"></div>
   </div>
 
@@ -272,9 +277,9 @@ input[type=range]::-moz-range-thumb{width:18px;height:22px;background:var(--pink
     </div>
     <div id="padBox" hidden style="margin-top:12px">
       <div class="tg">
-        <button class="btn" id="tKick" aria-pressed="true">Бочку играет тренажёр</button>
-        <button class="btn" id="tSticks" aria-pressed="true">Руки R / L на листе</button>
+        <button class="btn" id="tLeft" aria-pressed="false">Начинать левой</button>
       </div>
+    </div>
     </div>
     <div class="train" id="trainBox" hidden>от <input class="num" type="number" id="trFrom" min="40" max="160" value="60" aria-label="Начальный темп"> до <input class="num" type="number" id="trTo" min="40" max="160" value="90" aria-label="Целевой темп">, + <input class="num" type="number" id="trStep" min="1" max="20" value="2" aria-label="Шаг темпа"> каждые <input class="num" type="number" id="trBars" min="1" max="32" value="4" aria-label="Сколько тактов на шаг"> такта</div>
   </div>
@@ -301,6 +306,20 @@ var BASE=[
 ];
 var patterns=BASE.map(function(r){return {id:String(r[0]),h:EV.slice(),k:r[1],s:r[2],mine:false,src:''}});
 var cur=0;
+/* рудименты: заглавная буква — акцент, строчная — без акцента; длина = один цикл */
+var RUD=[
+ ['Одиночные','RLRLRLRL'],
+ ['Двойные','RRLLRRLL'],
+ ['Одиночные с акцентом','RlrlLrlr'],
+ ['Двойные с акцентом','RrLlRrLl'],
+ ['Парадиддл','RlrrLrll'],
+ ['Двойной парадиддл','RlrlrrLrlrll'],
+ ['Тройной парадиддл','RlrlrlrrLrlrlrll'],
+ ['Парадиддл-диддл','RlrrllLrllrr']
+];
+var rudiments=RUD.map(function(r){return {id:r[0],seq:r[1]}});
+var curR=0,leadLeft=false,rudH=[];
+function hands(rd){return rd.seq.split('').map(function(ch){var r=ch.toLowerCase()==='r';return {h:(r!==leadLeft)?'R':'L',acc:ch===ch.toUpperCase()}})}
 
 /* ---------- сохранение ---------- */
 function load(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}}
@@ -338,8 +357,9 @@ var SYM={
 };
 var cols=[]; // cols[step] = массив ячеек этого шага
 function renderSheet(){
-  var p=patterns[cur],sheet=$('#sheet');sheet.innerHTML='';cols=[];for(var i=0;i<16;i++)cols.push([]);
-  function row(cls,label,fn,muteKey){
+  if(padMode)return renderRud();
+  var p=patterns[cur],sheet=$('#sheet');sheet.innerHTML='';sheet.style.maxWidth='';cols=[];for(var i=0;i<16;i++)cols.push([]);
+  function row(cls,label,fn){
     var r=document.createElement('div');r.className='row '+cls;
     var l=document.createElement('div');l.className='rl';l.textContent=label;r.appendChild(l);
     for(var g=0;g<4;g++){
@@ -355,20 +375,42 @@ function renderSheet(){
     row('txt','',function(c,s){var L=labelFor(sys,s,p);c.textContent=L.t;if(L.on)c.classList.add('snd');if(L.beat)c.classList.add('beatn')});
   }
   txtRow($('#sysTop').value);
-  var hands=padMode&&sticksOn;
-  [['h',hands?'R':'Х'],['s',hands?'L':'М'],['k',hands?'F':'Б']].forEach(function(d){
-    var r=row('sym',d[1],function(c,s){
-      if(p[d[0]].indexOf(s)<0)return;
-      if(hands&&d[0]==='h')c.innerHTML='<span class="hand" style="color:var(--soft)">R</span>';
-      else if(hands&&d[0]==='s')c.innerHTML='<span class="hand" style="color:var(--mag)">L</span>';
-      else c.innerHTML=SYM[d[0]];
-    });
+  [['h','Х'],['s','М'],['k','Б']].forEach(function(d){
+    var r=row('sym',d[1],function(c,s){if(p[d[0]].indexOf(s)<0)return;c.innerHTML=SYM[d[0]]});
     r.dataset.i=d[0];
   });
   applyMuteLook();
-  $('#pname').textContent=p.id;
-  $$('#chips .chip').forEach(function(b,i){b.setAttribute('aria-pressed',String(i===cur))});
-  $('#gs').href=gsUrl(p);
+  head(p.id,cur,gsUrl(p));
+}
+function renderRud(){
+  var rd=rudiments[curR],sheet=$('#sheet');sheet.innerHTML='';
+  rudH=hands(rd);var n=rudH.length,groups=n/4;cols=[];for(var i=0;i<n;i++)cols.push([]);
+  sheet.style.maxWidth=n>=16?'':Math.round(n/16*100+14)+'%';
+  function row(cls,label,fn){
+    var r=document.createElement('div');r.className='row '+cls;
+    var l=document.createElement('div');l.className='rl';l.textContent=label;r.appendChild(l);
+    for(var g=0;g<groups;g++){
+      var gr=document.createElement('div');gr.className='grp'+((g%2===0)?' strong':'');
+      for(var q=0;q<4;q++){var s=g*4+q;var c=document.createElement('div');c.className='cell';fn(c,s);gr.appendChild(c);cols[s].push(c)}
+      r.appendChild(gr);
+    }
+    sheet.appendChild(r);
+  }
+  var sys=$('#sysTop').value;if(sys==='drum')sys='count';
+  if(sys!=='none')row('txt','',function(c,s){var L=labelFor(sys,s,{h:[],s:[],k:[]});c.textContent=L.t;c.classList.add('snd');if(L.beat)c.classList.add('beatn')});
+  ['R','L'].forEach(function(h){row('sym',h,function(c,s){
+    var x=rudH[s];if(x.h!==h)return;
+    c.innerHTML='<span class="hand'+(x.acc?'':' u')+'" style="color:'+(h==='R'?'var(--soft)':'var(--mag)')+'">'+h+'</span>'+(x.acc?'<i class="acc">&gt;</i>':'');
+  })});
+  head(rd.id,curR,null);
+}
+function head(name,idx,gs){
+  var b=$('#pname'),len=name.length,fs=len>10?30:38;
+  b.textContent=name;b.style.fontSize=len>7?fs+'px':'';
+  $('.day').style.minWidth=len>7?Math.round(len*fs*.6)+'px':'';
+  $$('#chips .chip').forEach(function(c,i){c.setAttribute('aria-pressed',String(i===idx))});
+  var g=$('#gs');g.hidden=!gs;if(gs)g.href=gs;
+  $('#listTitle').textContent=padMode?'Рудименты':'Паттерны';$('#listRange').textContent=padMode?String(rudiments.length):'303–330';
 }
 function gsUrl(p){
   function line(a,ch){var s='';for(var i=0;i<16;i++)s+=a.indexOf(i)>=0?ch:'-';return '|'+s+'|'}
@@ -377,17 +419,20 @@ function gsUrl(p){
 function applyMuteLook(){$$('.row.sym').forEach(function(r){r.classList.toggle('muted-row',!mute[r.dataset.i])})}
 function renderChips(){
   var c=$('#chips');c.innerHTML='';
-  patterns.forEach(function(p,i){
-    var b=document.createElement('button');b.className='chip'+(p.mine?' mine':'');b.textContent=p.id;b.setAttribute('aria-pressed',String(i===cur));
+  curList().forEach(function(p,i){
+    var b=document.createElement('button');b.className='chip';b.textContent=p.id;b.setAttribute('aria-pressed',String(i===curIdx()));
     b.onclick=function(){selectPattern(i)};c.appendChild(b);
   });
 }
-var padMode=false,sticksOn=true,padKick=true;
+var padMode=false;
+function curList(){return padMode?rudiments:patterns}
+function curIdx(){return padMode?curR:cur}
 function selectPattern(i){
   if(playing)stop();
-  cur=i;renderSheet();prefs.cur=patterns[cur].id;save('groove.prefs',prefs);
+  if(padMode){curR=i;prefs.curR=rudiments[i].id}else{cur=i;prefs.cur=patterns[i].id}
+  save('groove.prefs',prefs);renderSheet();
 }
-function go(d){selectPattern((cur+d+patterns.length)%patterns.length)}
+function go(d){var n=curList().length;selectPattern((curIdx()+d+n)%n)}
 $('#prev').onclick=function(){go(-1)};$('#next').onclick=function(){go(1)};
 $('#sysTop').onchange=function(){prefs.top=$('#sysTop').value;save('groove.prefs',prefs);renderSheet()};
 
@@ -461,22 +506,34 @@ function playClick(t,accent){
   o.connect(g);g.connect(gMet);o.start(t);o.stop(t+.05);
 }
 
+function playStroke(h,acc,t){
+  var o=ctx.createOscillator(),g=ctx.createGain();o.type='triangle';
+  o.frequency.setValueAtTime(h==='R'?880:560,t);
+  g.gain.setValueAtTime(acc?.9:.4,t);g.gain.exponentialRampToValueAtTime(.001,t+.07);
+  o.connect(g);g.connect(gPart);o.start(t);o.stop(t+.09);
+}
+
 /* ---------- планировщик ---------- */
-var playing=false,timer=null,raf=null,nextT=0,stepI=0,queue=[];
+var playing=false,timer=null,raf=null,nextT=0,stepI=0,queue=[],gstep=0;
 var on={met:true,count:true,part:true};var mute={h:true,s:true,k:true};
 function bpm(){return +$('#bpm').value}
 function stepDur(){return 60/bpm()/4}
 function scheduleStep(i,t){
-  var pos=i<0?i+16:i,p=patterns[cur];
-  if(i<0){ if(pos%4===0)playClick(t,pos===0); return }
+  var pos=i<0?i+16:i;
+  if(i<0){ if(pos%4===0)playClick(t,pos===0); return pos }
   if(on.met&&pos%4===0)playClick(t,pos===0);
-  if(padMode){ // на пэде руки играет она сама, из тренажёра звучит только бочка
-    if(padKick&&mute.k&&p.k.indexOf(pos)>=0)playKick(t);
-  }else if(on.part){
+  if(padMode){ // пэд: рудимент играется по кругу, длина цикла своя
+    var k=gstep%rudH.length;gstep++;
+    if(on.part)playStroke(rudH[k].h,rudH[k].acc,t);
+    return k;
+  }
+  var p=patterns[cur];
+  if(on.part){
     if(mute.h&&p.h.indexOf(pos)>=0)playHat(t);
     if(mute.s&&p.s.indexOf(pos)>=0)playSnare(t);
     if(mute.k&&p.k.indexOf(pos)>=0)playKick(t);
   }
+  return pos;
 }
 /* тренировка темпа: каждые N тактов темп растёт на шаг до цели */
 var trainOn=false,trBarsDone=0;
@@ -493,7 +550,7 @@ function onBarDone(){
 }
 function sched(){
   while(nextT<ctx.currentTime+.14){
-    scheduleStep(stepI,nextT);queue.push({t:nextT,i:stepI});
+    var pp=scheduleStep(stepI,nextT);queue.push({t:nextT,i:stepI,p:pp});
     nextT+=stepDur();stepI++;if(stepI>=16){stepI=0;onBarDone()}
   }
 }
@@ -503,7 +560,7 @@ function draw(){
   while(queue.length&&queue[0].t<=ctx.currentTime){
     var e=queue.shift();clearNow();
     var pos=e.i<0?e.i+16:e.i;
-    if(e.i>=0)cols[pos].forEach(function(c){c.classList.add('now')});
+    if(e.i>=0&&cols[e.p])cols[e.p].forEach(function(c){c.classList.add('now')});
     if(pos%4===0)setBeats(pos>>2);
   }
   raf=requestAnimationFrame(draw);
@@ -511,7 +568,7 @@ function draw(){
 function start(){
   ensureCtx();playing=true;queue=[];
   if(trainOn){var q=trParams();trBarsDone=0;if(q.from<q.to)setBpm(q.from);trUpdateMsg()}
-  stepI=on.count?-16:0;nextT=ctx.currentTime+.08;
+  stepI=on.count?-16:0;gstep=0;nextT=ctx.currentTime+.08;
   sched();timer=setInterval(sched,25);raf=requestAnimationFrame(draw);
   var b=$('#play');b.textContent='■ Стоп';b.setAttribute('aria-pressed','true');
 }
@@ -538,11 +595,10 @@ function setMode(pad){
   if(playing)stop();
   padMode=pad;
   $('#mPad').setAttribute('aria-pressed',String(pad));
-  $('#padBox').hidden=!pad;renderSheet();
+  $('#padBox').hidden=!pad;renderChips();renderSheet();
 }
 $('#mPad').onclick=function(){setMode(!padMode)};
-$('#tKick').onclick=function(){padKick=!padKick;this.setAttribute('aria-pressed',String(padKick))};
-$('#tSticks').onclick=function(){sticksOn=!sticksOn;this.setAttribute('aria-pressed',String(sticksOn));renderSheet()};
+$('#tLeft').onclick=function(){if(playing)stop();leadLeft=!leadLeft;this.setAttribute('aria-pressed',String(leadLeft));renderSheet()};
 $('#tTrain').onclick=function(){
   trainOn=!trainOn;this.setAttribute('aria-pressed',String(trainOn));$('#trainBox').hidden=!trainOn;trUpdateMsg();
 };
